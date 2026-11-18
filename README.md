@@ -62,12 +62,11 @@ Open https://localhost:8081/
 
 ## Later
 
-These are not in the build. They are the next pieces, not claims about this version.
+These are not in this build. Each one is a large project on its own.
 
-- Put the board on the real table by fitting it to the palm plane.
-- Select a piece by looking at it, then pinch to confirm.
-- A stronger engine than the current two-move search.
-- A public match list, instead of sending a friend a code.
-- Controller haptics. A physical board you can touch is a different product.
-
-This is not a copy of any existing Quest chess title. The opponent across the table is a simple seated figure made for this project.
+- A match that stays locked to one real table after the headset comes off, and is still there when you come back.
+- Ranked play with accounts, clocks, tournaments, and spectators, plus a way to tell a hand move from an engine.
+- The person across the table is your friend: their head, hands, and voice, taken from their own headset.
+- A real wooden set in the room drives the game. The cameras read the pieces, and you feel the board when you touch it.
+- A coach in the room that talks through a plan and can rewind the position without ending the live game.
+- One clock shared by a person in a headset, a person on a phone, and a person watching on a computer.

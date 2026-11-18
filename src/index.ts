@@ -10,14 +10,25 @@ import {
   OneHandGrabbable,
   DistanceGrabbable,
   RayInteractable,
+  Color,
+  Raycaster,
+  Vector2,
+  Sprite,
+  SpriteMaterial,
+  CanvasTexture,
+  MeshLambertMaterial,
+  AmbientLight,
+  DirectionalLight,
+  HemisphereLight,
+  RepeatWrapping,
+  SRGBColorSpace,
 } from "@iwsdk/core";
 import projectOptions from "virtual:iwsdk-project";
 import { Chess } from "chess.js";
-import { Color, Raycaster, Vector2, Sprite, SpriteMaterial, CanvasTexture, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight, RepeatWrapping, SRGBColorSpace } from "three";
 
 const SQUARE = 0.11;
-const BOARD_Y = 0.78;
-const BOARD_Z = -0.05;
+const BOARD_Y = 0.95;
+const BOARD_Z = -1.95;
 const chess = new Chess();
 
 type Role = "solo" | "host" | "guest";

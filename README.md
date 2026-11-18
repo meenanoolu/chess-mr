@@ -4,18 +4,26 @@ Seated mixed-reality chess. Play in the browser, or open the same page on a Meta
 
 Play it here: https://meenanoolu.github.io/chess-mr/
 
+## For judges
+
+This is a seated, hands-first mixed-reality chess game built with the Immersive Web SDK.
+
+Published build: https://meenanoolu.github.io/chess-mr/
+
+The published page does not show the headset room until an XR runtime is active.
+
+- On a Quest, open that link in the headset browser and press **Enter XR**. Pinch a gold piece, then pinch a green square.
+- On a computer, either run the local server below, or install the [Immersive Web Emulator](https://chromewebstore.google.com/detail/immersive-web-emulator/cgffilbpcibhmcfbgggfhfolhkfbhmik), open the published page, click the extension icon, and press **Enter XR**.
+- Look around with the emulator's play mode. Use hands mode. Left mouse pinches.
+
+Gold moves first. Only legal chess moves are accepted. Red replies. **Host game + voice** starts a game with a friend.
+
 ## How to play
 
-Gold moves first.
-
-1. Click a gold piece. Legal squares turn green.
-2. Click a green square to move.
-3. Red plays a legal reply.
-4. Illegal moves are rejected and the piece goes back.
-
-On a Quest, open the page in the headset browser and pinch a piece. Drop it on a legal square.
-
-To play a friend, press **Host game + voice**, send them the code, and have them press **Join** on the same page. You can talk while you play. Mute turns your microphone off.
+1. Press **Enter XR**.
+2. Pinch or click a gold piece. Legal squares turn green.
+3. Pinch or click a green square.
+4. Red plays a legal reply. An illegal move is rejected.
 
 ## Rules
 

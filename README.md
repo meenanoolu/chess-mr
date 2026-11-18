@@ -21,9 +21,12 @@ Gold moves first. Only legal chess moves are accepted. Red replies. **Host game 
 ## How to play
 
 1. Press **Enter XR**.
-2. Pinch or click a gold piece. Legal squares turn green.
-3. Pinch or click a green square.
-4. Red plays a legal reply. An illegal move is rejected.
+2. Pinch or click a gold piece. Legal squares turn green. Captures turn red.
+3. Pinch or click a green or red square.
+4. If a pawn reaches the last rank, choose Q, R, B, or N.
+5. Red plays a legal reply. **Undo** takes back your move and that reply. **New game** starts over. **Opponent** switches between Fair and Easy.
+
+A move makes a short sound. The last move stays highlighted. The panel lists what each side has lost.
 
 ## Rules
 
@@ -32,7 +35,7 @@ The board follows standard chess. [chess.js](https://github.com/jhlywa/chess.js)
 - A piece can only move in its own way.
 - You cannot move the other side, or move into check.
 - Captures remove the taken piece.
-- Castling, en passant, and promotion to a queen are included.
+- Castling, en passant, and promotion to a queen, rook, bishop, or knight are included.
 - Check, checkmate, stalemate, and draws are shown in the panel.
 
 ## Run it locally
@@ -53,6 +56,18 @@ Open https://localhost:8081/
 ## Stack
 
 - [Immersive Web SDK](https://iwsdk.dev/) for the 3D scene, hand pinch, and Quest AR
-- Three.js for the board, table, and pieces
+- Three.js for the board, table, pieces, and the seated opponent
 - chess.js for the rules
 - PeerJS for a friend game and voice
+
+## Later
+
+These are not in the build. They are the next pieces, not claims about this version.
+
+- Put the board on the real table by fitting it to the palm plane.
+- Select a piece by looking at it, then pinch to confirm.
+- A stronger engine than the current two-move search.
+- A public match list, instead of sending a friend a code.
+- Controller haptics. A physical board you can touch is a different product.
+
+This is not a copy of any existing Quest chess title. The opponent across the table is a simple seated figure made for this project.

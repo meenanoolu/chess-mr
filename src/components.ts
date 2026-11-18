@@ -1,3 +1,3 @@
 import { defineComponents } from "@iwsdk/core";
 
-export default defineComponents({});
+export default defineComponents([]);

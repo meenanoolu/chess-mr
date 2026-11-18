@@ -154,6 +154,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
         mat((r + c) % 2 === 0 ? 0xf3e6c8 : 0xb58863),
       );
       square.userData.sq = squareOf(c, r);
+      square.userData.base = (r + c) % 2 === 0 ? 0xf3e6c8 : 0xb58863;
       square.position.set((c - 3.5) * SQUARE, BOARD_Y, BOARD_Z + (r - 3.5) * SQUARE);
       board.add(square);
     }
@@ -176,11 +177,14 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
       entity.addComponent(RayInteractable);
       entity.addComponent(OneHandGrabbable, { translate: true, rotate: false });
       entity.addComponent(DistanceGrabbable, { translate: true, rotate: false });
-      const record = { obj: entity.object3D, square, color: white ? "w" : "b", captured: false, still: 0, lastX: p.x, lastY: p.y, lastZ: p.z };
+      const record = { obj: entity.object3D, type: ch.toLowerCase(), square, color: white ? "w" : "b", captured: false, still: 0, lastX: p.x, lastY: p.y, lastZ: p.z };
       entity.object3D!.traverse((child) => { child.userData.piece = record; });
       pieces.push(record);
     }
   });
+
+  const squareMeshes = new Map<string, any>();
+  board.traverse((child: any) => { if (child.userData.sq) squareMeshes.set(child.userData.sq, child); });
 
   const place = (piece: any) => {
     const p = posOf(piece.square);
@@ -188,30 +192,108 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     piece.lastX = p.x; piece.lastY = p.y; piece.lastZ = p.z;
     piece.still = 99;
   };
-  const takeAt = (square: string, keeper: any) => {
-    const victim = pieces.find((v) => !v.captured && v !== keeper && v.square === square);
-    if (!victim) return;
-    victim.captured = true;
-    victim.obj.visible = false;
-  };
-  const playOnBoard = (from: string, to: string) => {
-    const played = chess.move({ from, to, promotion: "q" }) as any;
+  function restyle(piece: any, type: string) {
+    const fresh = makePiece(type, piece.color === "w");
+    const group = piece.obj;
+    while (group.children.length) group.remove(group.children[0]);
+    while (fresh.children.length) group.add(fresh.children[0]);
+    group.traverse((child: any) => { child.userData.piece = piece; });
+    piece.type = type;
+  }
+  function sync() {
+    const needed: { square: string; type: string; color: string }[] = [];
+    chess.board().forEach((row, r) => {
+      row.forEach((cell, c) => { if (cell) needed.push({ square: squareOf(c, r), type: cell.type, color: cell.color }); });
+    });
+    const used = new Set<any>();
+    const claim = (pred: (p: any) => boolean) => pieces.find((p) => !used.has(p) && pred(p));
+    for (const need of needed) {
+      const piece = claim((p) => p.type === need.type && p.color === need.color && p.square === need.square)
+        || claim((p) => p.type === need.type && p.color === need.color)
+        || claim((p) => p.type === "p" && p.color === need.color);
+      if (!piece) continue;
+      used.add(piece);
+      if (piece.type !== need.type) restyle(piece, need.type);
+      piece.square = need.square;
+      piece.captured = false;
+      piece.obj.visible = true;
+      place(piece);
+    }
+    for (const piece of pieces) {
+      if (used.has(piece)) continue;
+      piece.captured = true;
+      piece.obj.visible = false;
+    }
+  }
+  function outcome() {
+    if (chess.isCheckmate()) return "mate";
+    if (chess.isStalemate()) return "stalemate";
+    if (chess.isDraw()) return "draw";
+    if (chess.isCheck()) return "check";
+    return "";
+  }
+  function paint(square?: string) {
+    for (const [name, mesh] of squareMeshes) {
+      mesh.material.color.setHex(name === square ? 0xd6b25e : mesh.userData.base);
+    }
+    if (!square) return;
+    for (const move of chess.moves({ square, verbose: true }) as any[]) {
+      squareMeshes.get(move.to)?.material.color.setHex(0x2f8f4e);
+    }
+  }
+  let selected: any = null;
+  function setSelected(piece: any | null) {
+    selected = piece;
+    paint(piece?.square);
+  }
+  function sayTurn() {
+    const end = outcome();
+    if (end === "mate") { ui.status.textContent = (chess.turn() === "w" ? "Red" : "Gold") + " wins. Checkmate."; return; }
+    if (end === "stalemate") { ui.status.textContent = "Stalemate."; return; }
+    if (end === "draw") { ui.status.textContent = "Draw."; return; }
+    const mine = role === "guest" ? "b" : "w";
+    const yours = chess.turn() === mine;
+    const who = role === "solo" ? (yours ? "Your turn (gold)" : "Red's turn") : (yours ? "Your turn" : "Friend's turn");
+    ui.status.textContent = end === "check" ? "Check. " + who : who;
+  }
+  function play(from: string, to: string) {
+    let played: any = null;
+    try { played = chess.move({ from, to, promotion: "q" }); }
+    catch { return null; }
     if (!played) return null;
-    const mover = pieces.find((v) => !v.captured && v.square === from);
-    if (!mover) return null;
-    if (played.captured) takeAt(to, mover);
-    mover.square = to;
-    place(mover);
+    sync();
+    setSelected(null);
+    sayTurn();
     return played;
-  };
-  const blackReply = () => {
-    if (role !== "solo" || chess.turn() !== "b") return;
-    const moves = chess.moves({ verbose: true }) as any[];
-    if (!moves.length) return;
-    const m = moves[Math.floor(Math.random() * moves.length)];
-    playOnBoard(m.from, m.to);
-    ui.status.textContent = chess.isGameOver() ? "Game over" : "Your turn (gold)";
-  };
+  }
+  function blackReply() {
+    if (role !== "solo" || chess.turn() !== "b" || chess.isGameOver()) return;
+    const values: Record<string, number> = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
+    const evaluate = () => {
+      if (chess.isCheckmate()) return chess.turn() === "w" ? -20000 : 20000;
+      if (chess.isDraw()) return 0;
+      let score = 0;
+      for (const row of chess.board()) for (const cell of row) if (cell) score += values[cell.type] * (cell.color === "b" ? 1 : -1);
+      return score;
+    };
+    let best: any = null;
+    let bestScore = -Infinity;
+    for (const move of chess.moves({ verbose: true }) as any[]) {
+      chess.move(move);
+      let worst = 20000;
+      const replies = chess.moves({ verbose: true }) as any[];
+      if (!replies.length) worst = evaluate();
+      for (const reply of replies) {
+        chess.move(reply);
+        worst = Math.min(worst, evaluate());
+        chess.undo();
+      }
+      chess.undo();
+      const noisy = worst + Math.random() * 8;
+      if (noisy > bestScore) { bestScore = noisy; best = move; }
+    }
+    if (best) play(best.from, best.to);
+  }
 
   const myColor = () => (role === "guest" ? "b" : "w");
 
@@ -231,8 +313,8 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     link = conn;
     conn.on("data", (msg: any) => {
       if (msg?.t !== "move") return;
-      playOnBoard(msg.from, msg.to);
-      ui.status.textContent = chess.isGameOver() ? "Game over" : (chess.turn() === myColor() ? "Your turn" : "Friend's turn");
+      if (play(msg.from, msg.to)) return;
+      ui.status.textContent = "Friend's move was rejected.";
     });
     conn.on("open", () => {
       ui.status.textContent = role === "host" ? "Friend joined. You are gold." : "Connected. You are red.";
@@ -271,47 +353,48 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     ui.mute.textContent = micTrack.enabled ? "Mute mic" : "Unmute mic";
   };
 
-  let selected: any = null;
   const raycaster = new Raycaster();
   const pointer = new Vector2();
   window.addEventListener("pointerdown", (ev: PointerEvent) => {
     const target = ev.target as HTMLElement | null;
     if (target && target.closest("button, input")) return;
+    if (chess.isGameOver()) return;
     const rect = world.renderer.domElement.getBoundingClientRect();
     pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, world.camera);
-    const hits = raycaster.intersectObjects(world.scene.children, true);
-    let pieceHit: any = null;
-    let squareHit: string | null = null;
-    for (const hit of hits) {
-      const data = hit.object.userData;
-      if (!pieceHit && data.piece && !data.piece.captured) pieceHit = data.piece;
-      if (!squareHit && data.sq) squareHit = data.sq;
-    }
+    const origin = raycaster.ray.origin;
+    const dir = raycaster.ray.direction;
+    const depth = (BOARD_Y - origin.y) / dir.y;
+    if (!Number.isFinite(depth) || depth < 0) return;
+    const square = nearestSquare(origin.x + dir.x * depth, origin.z + dir.z * depth);
+    if (!square) return;
     const turn = chess.turn();
     if (role === "solo" && turn !== "w") return;
     if (role !== "solo" && turn !== myColor()) return;
-    if (pieceHit && !squareHit) squareHit = pieceHit.square;
-    if (selected && squareHit && squareHit !== selected.square && !(pieceHit && pieceHit.color === turn && pieceHit !== selected)) {
-      const from = selected.square;
-      selected = null;
-      const played = playOnBoard(from, squareHit);
-      if (!played) { ui.status.textContent = "Illegal move"; return; }
-      if (role === "solo") setTimeout(blackReply, 350);
-      else link?.send({ t: "move", from, to: squareHit });
-      ui.status.textContent = chess.isGameOver() ? "Game over" : (role === "solo" ? "Black is thinking" : "Friend's turn");
+    const occupant = pieces.find((p) => !p.captured && p.square === square);
+    if (selected) {
+      const legal = (chess.moves({ square: selected.square, verbose: true }) as any[]).some((m) => m.to === square);
+      if (legal) {
+        const from = selected.square;
+        play(from, square);
+        if (role === "solo") setTimeout(blackReply, 250);
+        else link?.send({ t: "move", from, to: square });
+        return;
+      }
+    }
+    if (occupant && occupant.color === turn) {
+      setSelected(occupant);
+      ui.status.textContent = occupant.square.toUpperCase() + " selected. Green squares are legal.";
       return;
     }
-    if (pieceHit && pieceHit.color === turn) {
-      selected = pieceHit;
-      ui.status.textContent = "Selected " + pieceHit.square.toUpperCase();
-    }
+    ui.status.textContent = "Illegal move.";
   });
 
   const tick = () => {
     requestAnimationFrame(tick);
     const turn = chess.turn();
+    if (chess.isGameOver()) return;
     if (role === "solo" && turn !== "w") return;
     if (role !== "solo" && turn !== myColor()) return;
     for (const piece of pieces) {
@@ -325,11 +408,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
       if (piece.still < 15 || Math.hypot(o.x - home.x, o.z - home.z) < 0.04) continue;
       const target = nearestSquare(o.x, o.z);
       const from = piece.square;
-      const played = target ? playOnBoard(from, target) : null;
-      if (!played) { place(piece); continue; }
-      if (role === "solo") setTimeout(blackReply, 350);
+      if (!target || target === from || !play(from, target)) { place(piece); continue; }
+      if (role === "solo") setTimeout(blackReply, 250);
       else link?.send({ t: "move", from, to: target });
-      ui.status.textContent = chess.isGameOver() ? "Game over" : "Friend's turn";
       break;
     }
   };

@@ -13,10 +13,11 @@ import {
 } from "@iwsdk/core";
 import projectOptions from "virtual:iwsdk-project";
 import { Chess } from "chess.js";
+import { Color, Raycaster, Vector2 } from "three";
 
 const SQUARE = 0.09;
-const BOARD_Y = 0.9;
-const BOARD_Z = -0.55;
+const BOARD_Y = 0.78;
+const BOARD_Z = -0.05;
 const chess = new Chess();
 
 type Role = "solo" | "host" | "guest";
@@ -41,6 +42,7 @@ function makePiece(type: string, white: boolean) {
     new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.04, depthWrite: false }),
   );
   hit.position.y = 0.1;
+  hit.raycast = () => {};
   g.add(hit);
   add(g, new Mesh(new CylinderGeometry(0.04, 0.044, 0.012, 24), a), 0, 0.006);
   add(g, new Mesh(new CylinderGeometry(0.03, 0.036, 0.012, 24), c), 0, 0.016);
@@ -134,6 +136,13 @@ function panel() {
 
 World.create(document.getElementById("scene-container") as HTMLDivElement, projectOptions).then(async (world) => {
   const ui = panel();
+  world.scene.background = new Color(0x24180f);
+  const floor = new Mesh(new BoxGeometry(6, 0.04, 6), mat(0x5c3b22));
+  floor.position.set(0, 0, 0);
+  world.createTransformEntity(floor);
+  const table = new Mesh(new BoxGeometry(1.7, 0.07, 1.25), mat(0x8a5a32));
+  table.position.set(0, BOARD_Y - 0.08, BOARD_Z);
+  world.createTransformEntity(table);
   const board = new Group();
   const frame = new Mesh(new BoxGeometry(SQUARE * 8 + 0.08, 0.02, SQUARE * 8 + 0.08), mat(0x6b3e26));
   frame.position.set(0, BOARD_Y - 0.025, BOARD_Z);
@@ -144,6 +153,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
         new BoxGeometry(SQUARE * 0.98, 0.012, SQUARE * 0.98),
         mat((r + c) % 2 === 0 ? 0xf3e6c8 : 0xb58863),
       );
+      square.userData.sq = squareOf(c, r);
       square.position.set((c - 3.5) * SQUARE, BOARD_Y, BOARD_Z + (r - 3.5) * SQUARE);
       board.add(square);
     }
@@ -166,7 +176,9 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
       entity.addComponent(RayInteractable);
       entity.addComponent(OneHandGrabbable, { translate: true, rotate: false });
       entity.addComponent(DistanceGrabbable, { translate: true, rotate: false });
-      pieces.push({ obj: entity.object3D, square, color: white ? "w" : "b", captured: false, still: 0, lastX: p.x, lastY: p.y, lastZ: p.z });
+      const record = { obj: entity.object3D, square, color: white ? "w" : "b", captured: false, still: 0, lastX: p.x, lastY: p.y, lastZ: p.z };
+      entity.object3D!.traverse((child) => { child.userData.piece = record; });
+      pieces.push(record);
     }
   });
 
@@ -258,6 +270,44 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     micTrack.enabled = !micTrack.enabled;
     ui.mute.textContent = micTrack.enabled ? "Mute mic" : "Unmute mic";
   };
+
+  let selected: any = null;
+  const raycaster = new Raycaster();
+  const pointer = new Vector2();
+  window.addEventListener("pointerdown", (ev: PointerEvent) => {
+    const target = ev.target as HTMLElement | null;
+    if (target && target.closest("button, input")) return;
+    const rect = world.renderer.domElement.getBoundingClientRect();
+    pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, world.camera);
+    const hits = raycaster.intersectObjects(world.scene.children, true);
+    let pieceHit: any = null;
+    let squareHit: string | null = null;
+    for (const hit of hits) {
+      const data = hit.object.userData;
+      if (!pieceHit && data.piece && !data.piece.captured) pieceHit = data.piece;
+      if (!squareHit && data.sq) squareHit = data.sq;
+    }
+    const turn = chess.turn();
+    if (role === "solo" && turn !== "w") return;
+    if (role !== "solo" && turn !== myColor()) return;
+    if (pieceHit && !squareHit) squareHit = pieceHit.square;
+    if (selected && squareHit && squareHit !== selected.square && !(pieceHit && pieceHit.color === turn && pieceHit !== selected)) {
+      const from = selected.square;
+      selected = null;
+      const played = playOnBoard(from, squareHit);
+      if (!played) { ui.status.textContent = "Illegal move"; return; }
+      if (role === "solo") setTimeout(blackReply, 350);
+      else link?.send({ t: "move", from, to: squareHit });
+      ui.status.textContent = chess.isGameOver() ? "Game over" : (role === "solo" ? "Black is thinking" : "Friend's turn");
+      return;
+    }
+    if (pieceHit && pieceHit.color === turn) {
+      selected = pieceHit;
+      ui.status.textContent = "Selected " + pieceHit.square.toUpperCase();
+    }
+  });
 
   const tick = () => {
     requestAnimationFrame(tick);

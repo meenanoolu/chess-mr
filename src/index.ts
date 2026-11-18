@@ -13,9 +13,9 @@ import {
 } from "@iwsdk/core";
 import projectOptions from "virtual:iwsdk-project";
 import { Chess } from "chess.js";
-import { Color, Raycaster, Vector2 } from "three";
+import { Color, Raycaster, Vector2, Sprite, SpriteMaterial, CanvasTexture } from "three";
 
-const SQUARE = 0.09;
+const SQUARE = 0.11;
 const BOARD_Y = 0.78;
 const BOARD_Z = -0.05;
 const chess = new Chess();
@@ -97,6 +97,60 @@ function makePiece(type: string, white: boolean) {
   return g;
 }
 
+function seatOpponent(world: any) {
+  const g = new Group();
+  const cloth = mat(0x243044);
+  const skin = mat(0xc9a27a);
+  const chair = mat(0x4a3424);
+  add(g, new Mesh(new BoxGeometry(0.46, 0.08, 0.46), chair), 0, 0.42, 0);
+  add(g, new Mesh(new BoxGeometry(0.46, 0.5, 0.08), chair), 0, 0.7, -0.2);
+  add(g, new Mesh(new CylinderGeometry(0.16, 0.2, 0.42, 16), cloth), 0, 0.78, 0);
+  add(g, new Mesh(new SphereGeometry(0.11, 18, 14), skin), 0, 1.12, 0.02);
+  add(g, new Mesh(new SphereGeometry(0.055, 12, 10), mat(0x1a1a1a)), 0, 1.2, 0);
+  const arm = new Mesh(new CylinderGeometry(0.035, 0.04, 0.28, 10), cloth);
+  arm.rotation.z = Math.PI / 2;
+  arm.position.set(0.22, 0.86, 0.05);
+  g.add(arm);
+  const arm2 = arm.clone();
+  arm2.position.x = -0.22;
+  g.add(arm2);
+  g.position.set(0, 0, BOARD_Z - 0.72);
+  world.createTransformEntity(g);
+}
+
+function tag(text: string, x: number, z: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#f3e6c8";
+  ctx.font = "bold 72px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 64, 64);
+  const sprite = new Sprite(new SpriteMaterial({ map: new CanvasTexture(canvas), transparent: true, depthWrite: false }));
+  sprite.position.set(x, BOARD_Y + 0.03, z);
+  sprite.scale.set(0.055, 0.055, 0.055);
+  return sprite;
+}
+
+let audioCtx: AudioContext | null = null;
+function tone(freq: number) {
+  const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!Ctx) return;
+  audioCtx = audioCtx || new Ctx();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "triangle";
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.09);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.09);
+}
+
 function squareOf(file: number, rankFromTop: number) {
   return String.fromCharCode(97 + file) + (8 - rankFromTop);
 }
@@ -118,12 +172,21 @@ function panel() {
   box.innerHTML = `
     <div id="status">Solo vs computer. Enter XR for the headset.</div>
     <button id="enter" style="margin-top:8px;width:100%">Enter XR</button>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button id="reset" style="flex:1">New game</button>
+      <button id="undo" style="flex:1">Undo</button>
+    </div>
+    <button id="level" style="margin-top:8px;width:100%">Opponent: Fair</button>
     <button id="host" style="margin-top:8px;width:100%">Host game + voice</button>
     <div style="display:flex;gap:6px;margin-top:8px">
       <input id="code" placeholder="friend code" style="flex:1" />
       <button id="join">Join</button>
     </div>
     <button id="mute" style="margin-top:8px;width:100%">Mute mic</button>
+    <div id="promo" style="display:none;gap:6px;margin-top:8px">
+      <button data-p="q">Q</button><button data-p="r">R</button><button data-p="b">B</button><button data-p="n">N</button>
+    </div>
+    <div id="taken" style="margin-top:8px;opacity:.85"></div>
   `;
   document.body.appendChild(box);
   return {
@@ -133,6 +196,11 @@ function panel() {
     code: box.querySelector("#code") as HTMLInputElement,
     mute: box.querySelector("#mute") as HTMLButtonElement,
     enter: box.querySelector("#enter") as HTMLButtonElement,
+    reset: box.querySelector("#reset") as HTMLButtonElement,
+    undo: box.querySelector("#undo") as HTMLButtonElement,
+    level: box.querySelector("#level") as HTMLButtonElement,
+    promo: box.querySelector("#promo") as HTMLDivElement,
+    taken: box.querySelector("#taken") as HTMLDivElement,
   };
 }
 
@@ -162,6 +230,11 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     }
   }
   world.createTransformEntity(board);
+  seatOpponent(world);
+  for (let i = 0; i < 8; i++) {
+    world.scene.add(tag(String.fromCharCode(97 + i), (i - 3.5) * SQUARE, BOARD_Z + 4.2 * SQUARE));
+    world.scene.add(tag(String(8 - i), -4.2 * SQUARE, BOARD_Z + (i - 3.5) * SQUARE));
+  }
 
   const pieces: any[] = [];
   const rows = ["rnbqkbnr", "pppppppp", "........", "........", "........", "........", "PPPPPPPP", "RNBQKBNR"];
@@ -171,6 +244,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
       if (ch === ".") continue;
       const white = ch === ch.toUpperCase();
       const piece = makePiece(ch, white);
+      piece.scale.setScalar(1.25);
       const entity = world.createTransformEntity(piece);
       const square = squareOf(c, r);
       const p = posOf(square);
@@ -234,13 +308,18 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     if (chess.isCheck()) return "check";
     return "";
   }
+  let lastFrom = "";
+  let lastTo = "";
+  let level: "easy" | "fair" = "fair";
+  let pending: { from: string; to: string } | null = null;
   function paint(square?: string) {
     for (const [name, mesh] of squareMeshes) {
-      mesh.material.color.setHex(name === square ? 0xd6b25e : mesh.userData.base);
+      const last = name === lastFrom || name === lastTo;
+      mesh.material.color.setHex(name === square ? 0xd6b25e : last ? 0xd8c27a : mesh.userData.base);
     }
     if (!square) return;
     for (const move of chess.moves({ square, verbose: true }) as any[]) {
-      squareMeshes.get(move.to)?.material.color.setHex(0x2f8f4e);
+      squareMeshes.get(move.to)?.material.color.setHex(move.captured ? 0x8f3d2f : 0x2f8f4e);
     }
   }
   let selected: any = null;
@@ -248,7 +327,16 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     selected = piece;
     paint(piece?.square);
   }
+  function takenLine() {
+    const start: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+    const live: Record<string, Record<string, number>> = { w: { p: 0, n: 0, b: 0, r: 0, q: 0 }, b: { p: 0, n: 0, b: 0, r: 0, q: 0 } };
+    for (const row of chess.board()) for (const cell of row) if (cell && cell.type !== "k") live[cell.color][cell.type] += 1;
+    const names: Record<string, string> = { p: "P", n: "N", b: "B", r: "R", q: "Q" };
+    const lost = (color: "w" | "b") => Object.keys(start).flatMap((t) => Array(Math.max(0, start[t] - live[color][t])).fill(names[t])).join(" ");
+    ui.taken.textContent = "You took " + (lost("b") || "nothing") + ". You lost " + (lost("w") || "nothing") + ".";
+  }
   function sayTurn() {
+    takenLine();
     const end = outcome();
     if (end === "mate") { ui.status.textContent = (chess.turn() === "w" ? "Red" : "Gold") + " wins. Checkmate."; return; }
     if (end === "stalemate") { ui.status.textContent = "Stalemate."; return; }
@@ -258,18 +346,38 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     const who = role === "solo" ? (yours ? "Your turn (gold)" : "Red's turn") : (yours ? "Your turn" : "Friend's turn");
     ui.status.textContent = end === "check" ? "Check. " + who : who;
   }
-  function play(from: string, to: string) {
+  function promotes(from: string, to: string) {
+    return (chess.moves({ square: from, verbose: true }) as any[]).some((m) => m.to === to && m.promotion);
+  }
+  function play(from: string, to: string, promotion = "q") {
+    const spec: any = { from, to };
+    if (promotes(from, to)) spec.promotion = promotion;
     let played: any = null;
-    try { played = chess.move({ from, to, promotion: "q" }); }
+    try { played = chess.move(spec); }
     catch { return null; }
     if (!played) return null;
+    lastFrom = played.from;
+    lastTo = played.to;
+    tone(played.captured ? 196 : 523);
     sync();
     setSelected(null);
     sayTurn();
     return played;
   }
+  function afterMove(from: string, to: string) {
+    if (role === "solo") setTimeout(blackReply, 250);
+    else link?.send({ t: "move", from, to });
+  }
   function blackReply() {
     if (role !== "solo" || chess.turn() !== "b" || chess.isGameOver()) return;
+    if (level === "easy") {
+      const moves = chess.moves({ verbose: true }) as any[];
+      const caps = moves.filter((m) => m.captured);
+      const pool = caps.length ? caps : moves;
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      if (pick) play(pick.from, pick.to, pick.promotion || "q");
+      return;
+    }
     const values: Record<string, number> = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
     const evaluate = () => {
       if (chess.isCheckmate()) return chess.turn() === "w" ? -20000 : 20000;
@@ -362,6 +470,43 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
     ui.status.textContent = "Starting the headset session...";
     world.launchXR();
   };
+  ui.reset.onclick = () => {
+    chess.reset();
+    lastFrom = "";
+    lastTo = "";
+    pending = null;
+    ui.promo.style.display = "none";
+    sync();
+    setSelected(null);
+    sayTurn();
+  };
+  ui.undo.onclick = () => {
+    if (role !== "solo") { ui.status.textContent = "Undo is for a solo game."; return; }
+    if (!chess.history().length) return;
+    chess.undo();
+    if (chess.turn() === "b" && chess.history().length) chess.undo();
+    pending = null;
+    ui.promo.style.display = "none";
+    const hist = chess.history({ verbose: true }) as any[];
+    const prev = hist[hist.length - 1];
+    lastFrom = prev?.from || "";
+    lastTo = prev?.to || "";
+    sync();
+    setSelected(null);
+    sayTurn();
+  };
+  ui.level.onclick = () => {
+    level = level === "fair" ? "easy" : "fair";
+    ui.level.textContent = level === "fair" ? "Opponent: Fair" : "Opponent: Easy";
+  };
+  ui.promo.onclick = (ev: MouseEvent) => {
+    const choice = (ev.target as HTMLElement).dataset.p;
+    if (!choice || !pending) return;
+    const { from, to } = pending;
+    pending = null;
+    ui.promo.style.display = "none";
+    if (play(from, to, choice)) afterMove(from, to);
+  };
 
   const raycaster = new Raycaster();
   const pointer = new Vector2();
@@ -387,9 +532,13 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
       const legal = (chess.moves({ square: selected.square, verbose: true }) as any[]).some((m) => m.to === square);
       if (legal) {
         const from = selected.square;
-        play(from, square);
-        if (role === "solo") setTimeout(blackReply, 250);
-        else link?.send({ t: "move", from, to: square });
+        if (promotes(from, square)) {
+          pending = { from, to: square };
+          ui.promo.style.display = "flex";
+          ui.status.textContent = "Choose Q, R, B, or N.";
+          return;
+        }
+        if (play(from, square)) afterMove(from, square);
         return;
       }
     }
@@ -403,6 +552,8 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
 
   const tick = () => {
     requestAnimationFrame(tick);
+    floor.visible = !world.session;
+    world.scene.background = world.session ? null : new Color(0x24180f);
     const turn = chess.turn();
     if (chess.isGameOver()) return;
     if (role === "solo" && turn !== "w") return;

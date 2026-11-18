@@ -13,7 +13,7 @@ import {
 } from "@iwsdk/core";
 import projectOptions from "virtual:iwsdk-project";
 import { Chess } from "chess.js";
-import { Color, Raycaster, Vector2, Sprite, SpriteMaterial, CanvasTexture } from "three";
+import { Color, Raycaster, Vector2, Sprite, SpriteMaterial, CanvasTexture, MeshLambertMaterial, AmbientLight, DirectionalLight, HemisphereLight, RepeatWrapping, SRGBColorSpace } from "three";
 
 const SQUARE = 0.11;
 const BOARD_Y = 0.78;
@@ -25,8 +25,40 @@ let role: Role = "solo";
 let link: any = null;
 let micTrack: MediaStreamTrack | null = null;
 
+function grainMap(fill: string, line: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = fill;
+  ctx.fillRect(0, 0, 128, 256);
+  for (let i = 0; i < 48; i++) {
+    const x = (i * 37) % 128;
+    ctx.strokeStyle = line;
+    ctx.lineWidth = i % 5 === 0 ? 2 : 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.bezierCurveTo(x + 10, 70, x - 12, 150, x + 4, 256);
+    ctx.stroke();
+  }
+  const map = new CanvasTexture(canvas);
+  map.wrapS = RepeatWrapping;
+  map.wrapT = RepeatWrapping;
+  map.colorSpace = SRGBColorSpace;
+  return map;
+}
+const ivory = grainMap("#f6efe2", "rgba(150,110,60,0.22)");
+const ebony = grainMap("#5a3b28", "rgba(20,8,0,0.35)");
+const oak = grainMap("#a56b3c", "rgba(90,50,20,0.25)");
+const walnut = grainMap("#6b4128", "rgba(40,18,8,0.3)");
+function flat(color: number) {
+  return new MeshLambertMaterial({ color });
+}
+function woodTex(map: CanvasTexture) {
+  return new MeshLambertMaterial({ color: 0xffffff, map });
+}
 function mat(color: number) {
-  return new MeshBasicMaterial({ color });
+  return flat(color);
 }
 function add(g: Group, mesh: Mesh, x: number, y: number, z = 0) {
   mesh.position.set(x, y, z);
@@ -35,64 +67,66 @@ function add(g: Group, mesh: Mesh, x: number, y: number, z = 0) {
 
 function makePiece(type: string, white: boolean) {
   const g = new Group();
-  const c = mat(white ? 0xe7d7a8 : 0xc62828);
-  const a = mat(white ? 0xb89b58 : 0x7a1212);
+  const c = woodTex(white ? ivory : ebony);
+  const a = woodTex(white ? ivory : ebony);
   const hit = new Mesh(
-    new BoxGeometry(0.16, 0.24, 0.16),
+    new BoxGeometry(0.09, 0.16, 0.09),
     new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.04, depthWrite: false }),
   );
-  hit.position.y = 0.1;
+  hit.position.y = 0.07;
   hit.raycast = () => {};
   g.add(hit);
-  add(g, new Mesh(new CylinderGeometry(0.04, 0.044, 0.012, 24), a), 0, 0.006);
-  add(g, new Mesh(new CylinderGeometry(0.03, 0.036, 0.012, 24), c), 0, 0.016);
-  add(g, new Mesh(new CylinderGeometry(0.02, 0.028, 0.01, 20), a), 0, 0.026);
+  add(g, new Mesh(new CylinderGeometry(0.028, 0.032, 0.008, 28), a), 0, 0.004);
+  add(g, new Mesh(new CylinderGeometry(0.02, 0.026, 0.008, 28), c), 0, 0.011);
+  add(g, new Mesh(new CylinderGeometry(0.014, 0.02, 0.006, 24), a), 0, 0.017);
   const t = type.toLowerCase();
   if (t === "p") {
-    add(g, new Mesh(new CylinderGeometry(0.011, 0.014, 0.04, 16), c), 0, 0.05);
-    add(g, new Mesh(new CylinderGeometry(0.018, 0.014, 0.012, 16), a), 0, 0.074);
-    add(g, new Mesh(new SphereGeometry(0.016, 20, 16), c), 0, 0.092);
+    add(g, new Mesh(new CylinderGeometry(0.008, 0.012, 0.028, 18), c), 0, 0.034);
+    add(g, new Mesh(new CylinderGeometry(0.014, 0.01, 0.008, 18), a), 0, 0.05);
+    add(g, new Mesh(new SphereGeometry(0.012, 22, 16), c), 0, 0.064);
   } else if (t === "r") {
-    add(g, new Mesh(new CylinderGeometry(0.02, 0.024, 0.055, 18), c), 0, 0.056);
-    add(g, new Mesh(new CylinderGeometry(0.028, 0.024, 0.014, 18), a), 0, 0.088);
-    for (let i = 0; i < 7; i++) {
-      const ang = (i / 7) * Math.PI * 2;
-      add(g, new Mesh(new BoxGeometry(0.008, 0.018, 0.008), c), Math.cos(ang) * 0.02, 0.104, Math.sin(ang) * 0.02);
-    }
-  } else if (t === "n") {
-    add(g, new Mesh(new CylinderGeometry(0.016, 0.02, 0.03, 14), c), 0, 0.042);
-    const neck = new Mesh(new BoxGeometry(0.02, 0.05, 0.026), c);
-    neck.position.set(0.004, 0.072, 0);
-    neck.rotation.z = -0.45;
-    g.add(neck);
-    const head = new Mesh(new BoxGeometry(0.02, 0.028, 0.018), c);
-    head.position.set(0.02, 0.09, 0);
-    head.rotation.z = -0.9;
-    g.add(head);
-    add(g, new Mesh(new BoxGeometry(0.03, 0.01, 0.012), c), 0.034, 0.078, 0);
-    add(g, new Mesh(new ConeGeometry(0.006, 0.02, 8), a), 0.012, 0.112, 0);
-    add(g, new Mesh(new SphereGeometry(0.004, 8, 8), mat(0x111111)), 0.036, 0.086, 0.006);
-  } else if (t === "b") {
-    add(g, new Mesh(new CylinderGeometry(0.012, 0.02, 0.05, 16), c), 0, 0.052);
-    add(g, new Mesh(new SphereGeometry(0.02, 18, 14), c), 0, 0.086);
-    add(g, new Mesh(new ConeGeometry(0.012, 0.03, 12), c), 0, 0.112);
-    const slit = new Mesh(new BoxGeometry(0.004, 0.022, 0.014), mat(white ? 0x6d5428 : 0x4a0808));
-    slit.position.set(0, 0.09, 0.012);
-    g.add(slit);
-  } else if (t === "q") {
-    add(g, new Mesh(new CylinderGeometry(0.013, 0.02, 0.07, 18), c), 0, 0.062);
-    add(g, new Mesh(new SphereGeometry(0.018, 16, 12), c), 0, 0.104);
-    add(g, new Mesh(new CylinderGeometry(0.02, 0.016, 0.01, 16), a), 0, 0.118);
+    add(g, new Mesh(new CylinderGeometry(0.014, 0.018, 0.04, 22), c), 0, 0.04);
+    add(g, new Mesh(new CylinderGeometry(0.02, 0.016, 0.012, 22), a), 0, 0.064);
     for (let i = 0; i < 8; i++) {
       const ang = (i / 8) * Math.PI * 2;
-      add(g, new Mesh(new SphereGeometry(0.005, 8, 8), a), Math.cos(ang) * 0.016, 0.128, Math.sin(ang) * 0.016);
+      add(g, new Mesh(new BoxGeometry(0.006, 0.012, 0.006), c), Math.cos(ang) * 0.015, 0.074, Math.sin(ang) * 0.015);
+    }
+  } else if (t === "n") {
+    add(g, new Mesh(new CylinderGeometry(0.012, 0.016, 0.02, 16), c), 0, 0.03);
+    const neck = new Mesh(new SphereGeometry(0.013, 16, 12), c);
+    neck.scale.set(1.1, 1.6, 0.8);
+    neck.position.set(0.004, 0.05, 0);
+    neck.rotation.z = -0.5;
+    g.add(neck);
+    const head = new Mesh(new SphereGeometry(0.014, 16, 12), c);
+    head.scale.set(1.5, 0.9, 0.7);
+    head.position.set(0.02, 0.066, 0);
+    head.rotation.z = -0.4;
+    g.add(head);
+    add(g, new Mesh(new ConeGeometry(0.004, 0.016, 8), a), 0.03, 0.072, 0);
+    add(g, new Mesh(new SphereGeometry(0.003, 8, 8), mat(0x111111)), 0.028, 0.068, 0.006);
+    add(g, new Mesh(new ConeGeometry(0.003, 0.012, 6), a), 0.01, 0.078, 0);
+  } else if (t === "b") {
+    add(g, new Mesh(new CylinderGeometry(0.008, 0.014, 0.04, 18), c), 0, 0.04);
+    add(g, new Mesh(new SphereGeometry(0.014, 18, 14), c), 0, 0.066);
+    add(g, new Mesh(new ConeGeometry(0.01, 0.026, 14), c), 0, 0.086);
+    const slit = new Mesh(new BoxGeometry(0.003, 0.016, 0.01), mat(white ? 0x8a7048 : 0x0c0a08));
+    slit.position.set(0, 0.07, 0.008);
+    g.add(slit);
+  } else if (t === "q") {
+    add(g, new Mesh(new CylinderGeometry(0.01, 0.015, 0.055, 20), c), 0, 0.048);
+    add(g, new Mesh(new SphereGeometry(0.013, 16, 12), c), 0, 0.082);
+    add(g, new Mesh(new CylinderGeometry(0.016, 0.012, 0.006, 18), a), 0, 0.094);
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      add(g, new Mesh(new SphereGeometry(0.0035, 8, 8), a), Math.cos(ang) * 0.012, 0.102, Math.sin(ang) * 0.012);
     }
   } else {
-    add(g, new Mesh(new CylinderGeometry(0.015, 0.022, 0.078, 18), c), 0, 0.066);
-    add(g, new Mesh(new SphereGeometry(0.018, 16, 12), c), 0, 0.112);
-    add(g, new Mesh(new CylinderGeometry(0.012, 0.012, 0.01, 12), a), 0, 0.128);
-    add(g, new Mesh(new BoxGeometry(0.006, 0.03, 0.006), a), 0, 0.148);
-    add(g, new Mesh(new BoxGeometry(0.026, 0.006, 0.006), a), 0, 0.156);
+    add(g, new Mesh(new CylinderGeometry(0.011, 0.016, 0.06, 20), c), 0, 0.05);
+    add(g, new Mesh(new SphereGeometry(0.014, 16, 12), c), 0, 0.086);
+    add(g, new Mesh(new CylinderGeometry(0.01, 0.01, 0.006, 14), a), 0, 0.098);
+    add(g, new Mesh(new BoxGeometry(0.004, 0.02, 0.004), a), 0, 0.112);
+    add(g, new Mesh(new BoxGeometry(0.018, 0.004, 0.004), a), 0, 0.12);
   }
   return g;
 }
@@ -207,24 +241,36 @@ function panel() {
 World.create(document.getElementById("scene-container") as HTMLDivElement, projectOptions).then(async (world) => {
   const ui = panel();
   world.scene.background = new Color(0x24180f);
-  const floor = new Mesh(new BoxGeometry(6, 0.04, 6), mat(0x5c3b22));
+  world.scene.add(new AmbientLight(0xfff4e4, 0.65));
+  world.scene.add(new HemisphereLight(0xfff6ea, 0x3a291c, 0.55));
+  const sun = new DirectionalLight(0xfff1d2, 1.15);
+  sun.position.set(0.8, 2.2, 1.4);
+  world.scene.add(sun);
+  const floor = new Mesh(new BoxGeometry(6, 0.04, 6), woodTex(walnut));
   floor.position.set(0, 0, 0);
   world.createTransformEntity(floor);
-  const table = new Mesh(new BoxGeometry(1.7, 0.07, 1.25), mat(0x8a5a32));
-  table.position.set(0, BOARD_Y - 0.08, BOARD_Z);
+  const table = new Group();
+  const top = new Mesh(new BoxGeometry(1.55, 0.06, 1.15), woodTex(oak));
+  top.position.set(0, BOARD_Y - 0.08, BOARD_Z);
+  table.add(top);
+  for (const [x, z] of [[-0.62, -0.42], [0.62, -0.42], [-0.62, 0.42], [0.62, 0.42]] as [number, number][]) {
+    const leg = new Mesh(new BoxGeometry(0.06, BOARD_Y - 0.12, 0.06), woodTex(walnut));
+    leg.position.set(x, (BOARD_Y - 0.12) / 2, BOARD_Z + z);
+    table.add(leg);
+  }
   world.createTransformEntity(table);
   const board = new Group();
-  const frame = new Mesh(new BoxGeometry(SQUARE * 8 + 0.08, 0.02, SQUARE * 8 + 0.08), mat(0x6b3e26));
+  const frame = new Mesh(new BoxGeometry(SQUARE * 8 + 0.06, 0.018, SQUARE * 8 + 0.06), woodTex(walnut));
   frame.position.set(0, BOARD_Y - 0.025, BOARD_Z);
   board.add(frame);
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const square = new Mesh(
         new BoxGeometry(SQUARE * 0.98, 0.012, SQUARE * 0.98),
-        mat((r + c) % 2 === 0 ? 0xf3e6c8 : 0xb58863),
+        woodTex((r + c) % 2 === 0 ? ivory : oak),
       );
       square.userData.sq = squareOf(c, r);
-      square.userData.base = (r + c) % 2 === 0 ? 0xf3e6c8 : 0xb58863;
+      square.userData.base = 0xffffff;
       square.position.set((c - 3.5) * SQUARE, BOARD_Y, BOARD_Z + (r - 3.5) * SQUARE);
       board.add(square);
     }
@@ -244,7 +290,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
       if (ch === ".") continue;
       const white = ch === ch.toUpperCase();
       const piece = makePiece(ch, white);
-      piece.scale.setScalar(1.25);
+      piece.scale.setScalar(1.85);
       const entity = world.createTransformEntity(piece);
       const square = squareOf(c, r);
       const p = posOf(square);
@@ -338,12 +384,12 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
   function sayTurn() {
     takenLine();
     const end = outcome();
-    if (end === "mate") { ui.status.textContent = (chess.turn() === "w" ? "Red" : "Gold") + " wins. Checkmate."; return; }
+    if (end === "mate") { ui.status.textContent = (chess.turn() === "w" ? "Black" : "White") + " wins. Checkmate."; return; }
     if (end === "stalemate") { ui.status.textContent = "Stalemate."; return; }
     if (end === "draw") { ui.status.textContent = "Draw."; return; }
     const mine = role === "guest" ? "b" : "w";
     const yours = chess.turn() === mine;
-    const who = role === "solo" ? (yours ? "Your turn (gold)" : "Red's turn") : (yours ? "Your turn" : "Friend's turn");
+    const who = role === "solo" ? (yours ? "Your turn (white)" : "Black's turn") : (yours ? "Your turn" : "Friend's turn");
     ui.status.textContent = end === "check" ? "Check. " + who : who;
   }
   function promotes(from: string, to: string) {
@@ -427,7 +473,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, proje
       ui.status.textContent = "Friend's move was rejected.";
     });
     conn.on("open", () => {
-      ui.status.textContent = role === "host" ? "Friend joined. You are gold." : "Connected. You are red.";
+      ui.status.textContent = role === "host" ? "Friend joined. You are white." : "Connected. You are black.";
       const call = role === "guest" ? peer.call(ui.code.value.trim(), stream) : null;
       if (call) call.on("stream", hear);
     });

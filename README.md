@@ -12,19 +12,19 @@ Published build: https://meenanoolu.github.io/chess-mr/
 
 The published page does not show the headset room until an XR runtime is active.
 
-- On a Quest, open that link in the headset browser and press **Enter XR**. Pinch a gold piece, then pinch a green square.
+- On a Quest, open that link in the headset browser and press **Enter XR**. Pinch a white piece, then pinch a green square.
 - On a computer, either run the local server below, or install the [Immersive Web Emulator](https://chromewebstore.google.com/detail/immersive-web-emulator/cgffilbpcibhmcfbgggfhfolhkfbhmik), open the published page, click the extension icon, and press **Enter XR**.
 - Look around with the emulator's play mode. Use hands mode. Left mouse pinches.
 
-Gold moves first. Only legal chess moves are accepted. Red replies. **Host game + voice** starts a game with a friend.
+White moves first. Only legal chess moves are accepted. Black replies. **Host game + voice** starts a game with a friend.
 
 ## How to play
 
 1. Press **Enter XR**.
-2. Pinch or click a gold piece. Legal squares turn green. Captures turn red.
+2. Pinch or click a white piece. Legal squares turn green. Captures turn red.
 3. Pinch or click a green or red square.
 4. If a pawn reaches the last rank, choose Q, R, B, or N.
-5. Red plays a legal reply. **Undo** takes back your move and that reply. **New game** starts over. **Opponent** switches between Fair and Easy.
+5. Black plays a legal reply. **Undo** takes back your move and that reply. **New game** starts over. **Opponent** switches between Fair and Easy.
 
 A move makes a short sound. The last move stays highlighted. The panel lists what each side has lost.
 
